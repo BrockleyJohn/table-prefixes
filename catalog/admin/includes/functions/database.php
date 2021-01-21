@@ -40,12 +40,233 @@
     die('<font color="#000000"><strong>' . $errno . ' - ' . $error . '<br /><br />' . $query . '<br /><br /><small><font color="#ff0000">[TEP STOP]</font></small><br /><br /></strong></font>');
   }
 
+  function bb_arr_table(&$value, $key, &$map) {
+    if ($key === 'table') {
+      if (! array_key_exists(trim($value, '`'), $map)) {
+        exit("TABLE PREFIX ERROR - <b>$key $value</b> not found");
+      }
+      $value = $map[trim($value, '`')];
+    }
+  }
+
+  function bb_db_table($sql) {
+    static $replace, $direct, $parser, $creator;
+    global $dbug;
+    if (! isset($dbug)) $dbug = false;
+    if (! isset($replace)) {
+      // set up list of core_names:
+      $core = [
+'categories',
+'categories_description',
+'products',
+'products_attributes',
+'products_attributes_download',
+'products_attributes_quantities',
+'products_availability',
+'products_delivery',
+'products_description',
+'products_guaranty',
+'products_images',
+'products_notifications',
+'products_options',
+'products_options_values',
+'products_options_values_to_products_options',
+'products_related_products',
+'products_stock',
+'products_tags',
+'products_to_categories',
+'hanfhaus_action_recorder',
+'action_recorder',
+'address_book',
+'address_format',
+'administrators',
+'articles',
+'articles_description',
+'articles_images',
+'articles_to_folders',
+'authors',
+'authors_info',
+'banners',
+'banners_history',
+'configuration',
+'configuration_group',
+'content',
+'content_description',
+'content_images',
+'countries',
+'currencies',
+'customer_data_groups',
+'customers',
+'customers_basket',
+'customers_basket_attributes',
+'customers_info',
+'customers_to_discount_codes',
+'database_optimizer',
+'discount_codes',
+'featured',
+'folders',
+'folders_description',
+'geo_zones',
+'hooks',
+'information',
+'information_group',
+'klarna_ordernum',
+'languages',
+'magiczoomplus_configuration',
+'manufacturers',
+'manufacturers_info',
+'mm_bulkmail',
+'mm_newsletters',
+'mm_responsemail',
+'mm_responsemail_backup',
+'mm_responsemail_reset',
+'mm_templates',
+'newsletters',
+'orders',
+'orders_products',
+'orders_products_attributes',
+'orders_products_download',
+'orders_status',
+'orders_status_history',
+'orders_total',
+'oscom_app_paypal_log',
+'pages',
+'reviews',
+'reviews_description',
+'secupay_iframe_url',
+'secupay_transactions',
+'secupay_transaction_order',
+'secupay_transaction_tracking',
+'sec_directory_whitelist',
+'sessions',
+'sessions_save',
+'slides',
+'slides_description',
+'specials',
+'stripe_event_log',
+'tax_class',
+'tax_rates',
+'testimonials',
+'testimonials_description',
+'usu_cache',
+'whos_online',
+'zones',
+'zones_to_geo_zones'
+      ];
+      $replace = [];
+      foreach ($core as $tab) {
+//        $rep = $tab == 'products' || $tab == 'categories' ? DB_COMMON_TABLE_PREFIX . $tab : DB_TABLE_PREFIX . $tab;
+        $rep = strpos($tab, 'products') === 0 || strpos($tab, 'categories') === 0 ? DB_COMMON_TABLE_PREFIX . $tab : DB_TABLE_PREFIX . $tab;
+        $replace['/(\s|,|`)' . $tab . '(\s|,|.|`|$)/'] = '${1}' . $rep . '$2';
+        $direct[$tab] = $rep;
+      }
+    }
+//    echo "sql before '$sql'<br>\n";
+    switch (true) {
+      case (substr_count(strtoupper($sql), 'SELECT') > 1) : // select with subselect
+      case ((stripos($sql, 'insert ') !== false || stripos($sql, 'update ') !== false || stripos($sql, 'delete ') !== false) && stripos($sql, 'select ') !== false) : // insert/update/delete with subselect
+      //case true :
+        if ($dbug) echo 'using parser<br>';
+        $sql_tail = '';
+        // ON DUPLICATE KEY UPDATE breaks it so...
+        if (stripos($sql, 'ON DUPLICATE KEY UPDATE') !== false) {
+          $sql_tail = substr($sql, stripos($sql, 'ON DUPLICATE KEY UPDATE'));
+          $sql = substr($sql, 0, stripos($sql, 'ON DUPLICATE KEY UPDATE'));
+        }
+        try {
+          if (! isset($parser)) {
+            include_once DIR_FS_CATALOG . 'vendor/autoload.php';
+            $parser = new \PHPSQLParser\PHPSQLParser($sql);
+            $creator = new \PHPSQLParser\PHPSQLCreator();
+          } else {
+            $parser->parse($sql);
+          }
+          $q_array = $parser->parsed;
+          if ($dbug) (print_r($q_array));
+          array_walk_recursive($q_array, 'bb_arr_table', $direct);
+          if ($dbug) (print_r($q_array));
+          $new_sql = $creator->create($q_array);
+        } catch (\Exception $e) {
+          exit('TABLE PREFIX EXCEPTION: ' . $e->getMessage() . "<br>processing query<br>$sql");
+        }
+        $new_sql .= $sql_tail;
+        break;
+      default :
+        if ($dbug) echo 'using regex<br>';
+        switch (true) { // what kind of statement?
+          case stripos($sql, 'create table ') !== false :
+          case stripos($sql, 'create temporary table ') !== false :
+            $to_left = stripos($sql, ' table ');
+            $from_right = stripos($sql, '(');
+            break;
+          case stripos($sql, 'alter table ') !== false :
+            $to_left = stripos($sql, 'alter table ');
+            if (stripos($sql, ' add ') !== false) {
+              $from_right = stripos($sql, ' add ');
+            } elseif (stripos($sql, ' modify ') !== false) {
+              $from_right = stripos($sql, ' modify ');
+            } elseif (stripos($sql, ' change ') !== false) {
+              $from_right = stripos($sql, ' change ');
+            } elseif (stripos($sql, ' alter ') !== false) {
+              $from_right = stripos($sql, ' alter ');
+            } else {
+              $from_right = strlen($sql);
+            }
+            break; 
+          case stripos($sql, 'update ') !== false :
+            $to_left = stripos($sql, 'update ');
+            if (stripos($sql, 'set') !== false) {
+              $from_right = stripos($sql, 'set');
+            } else {
+              $from_right = strlen($sql);
+            }
+            break;
+          case stripos($sql, 'insert ') !== false :
+            $to_left = stripos($sql, 'insert ');
+            if (stripos($sql, '(') !== false) {
+              $from_right = stripos($sql, '(');
+            } else {
+              $from_right = strlen($sql);
+            }
+            break;
+          case stripos($sql, 'select ') !== false || stripos($sql, 'delete ') !== false :
+          default : // lets assume it was really a select and try that approach
+            $to_left = stripos($sql, 'from ');
+            if (stripos($sql, 'where') !== false) {
+              $from_right = stripos($sql, 'where');
+            } elseif (stripos($sql, 'like') !== false) {
+              $from_right = stripos($sql, 'like');
+            } elseif (stripos($sql, 'order by') !== false) {
+              $from_right = stripos($sql, 'order by');
+            } else {
+              $from_right = strlen($sql);
+            }
+            break;
+        }
+        $tb_bit = substr($sql, $to_left, $from_right - $to_left);
+    //    echo "bit before '$tb_bit'<br>\n";
+        $tb_bit = preg_replace(array_keys($replace), array_values($replace), $tb_bit);
+    //    echo "bit after '$tb_bit'<br>\n";
+        $new_sql = substr($sql, 0, $to_left) . $tb_bit . ($from_right < strlen($sql) ? substr($sql, $from_right, strlen($sql) - $from_right) : '');
+    //    exit;
+    }
+    return $new_sql;
+  }
+
   function tep_db_query($query, $link = 'db_link') {
-    global $$link, $logger;
+    global $$link;
+
+    if (strpos($query, ':table_') !== false) {
+$query = str_replace(':table_products', DB_COMMON_TABLE_PREFIX . 'products', $query);
+	$query = str_replace(':table_categories', DB_COMMON_TABLE_PREFIX . 'categories', $query);
+    $query = str_replace(':table_', DB_TABLE_PREFIX, $query);
+      
+    } else {
+      $query = bb_db_table($query);
+    }
 
     if (defined('STORE_DB_TRANSACTIONS') && (STORE_DB_TRANSACTIONS == 'true')) {
-      if (!is_object($logger)) $logger = new logger();
-      $logger->write($query, 'QUERY');
+      error_log('QUERY: ' . $query . "\n", 3, STORE_PAGE_PARSE_TIME_LOG);
     }
 
     $result = mysqli_query($$link, $query) or tep_db_error($query, mysqli_errno($$link), mysqli_error($$link));
