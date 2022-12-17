@@ -194,6 +194,9 @@
       default :
         if ($dbug) echo 'using regex<br>';
         switch (true) { // what kind of statement?
+          case (stripos($sql, DB_TABLE_PREFIX) !== false) : // skip the sessions ones already edited...
+            $new_sql = $sql;
+            break;
           case stripos($sql, 'create table ') !== false :
           case stripos($sql, 'create temporary table ') !== false :
             $to_left = stripos($sql, ' table ');
@@ -238,6 +241,8 @@
               $from_right = stripos($sql, 'like');
             } elseif (stripos($sql, 'order by') !== false) {
               $from_right = stripos($sql, 'order by');
+            } elseif (stripos($sql, 'group by') !== false) {
+              $from_right = stripos($sql, 'group by');
             } else {
               $from_right = strlen($sql);
             }

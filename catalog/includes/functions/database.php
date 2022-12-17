@@ -159,6 +159,9 @@
     }
 //    echo "sql before '$sql'<br>\n";
     switch (true) {
+      case (stripos($sql, DB_TABLE_PREFIX) !== false) : // skip the sessions ones already edited...
+        $new_sql = $sql;
+        break;
       case (substr_count(strtoupper($sql), 'SELECT') > 1) : // select with subselect
       case ((stripos($sql, 'insert ') !== false || stripos($sql, 'update ') !== false || stripos($sql, 'delete ') !== false) && stripos($sql, 'select ') !== false) : // insert/update/delete with subselect
 //      case (stripos($sql, ' table ') !== false ) : // modifying database structure
@@ -235,6 +238,8 @@
               $from_right = stripos($sql, 'like');
             } elseif (stripos($sql, 'order by') !== false) {
               $from_right = stripos($sql, 'order by');
+            } elseif (stripos($sql, 'group by') !== false) {
+              $from_right = stripos($sql, 'group by');
             } else {
               $from_right = strlen($sql);
             }

@@ -38,8 +38,8 @@ try {
 }
 */
 //$q = tep_db_query("select * from `products_options` where `products_options_name` is null");
-//$q = tep_db_query("ALTER TABLE `products_options` ADD COLUMN `products_options_track_stock` TINYINT(4) DEFAULT '0' NOT NULL AFTER `products_options_name`");
-$q = tep_db_query('SELECT popt.products_options_name AS `option`, poval.products_options_values_name AS value, pa.options_id AS option_id, pa.options_values_id AS value_id, pa.price_prefix AS prefix, pa.options_values_price AS price FROM products_options popt INNER JOIN products_attributes pa ON pa.options_id = popt.products_options_id INNER JOIN products_options_values poval ON pa.options_values_id = poval.products_options_values_id AND popt.language_id = poval.language_id WHERE pa.products_id = 99921110 AND pa.options_id = 1 AND pa.options_values_id = 642 AND popt.language_id = 2');
+$q = tep_db_query("select customers_id from orders group by customers_id");
+//$q = tep_db_query('SELECT popt.products_options_name AS `option`, poval.products_options_values_name AS value, pa.options_id AS option_id, pa.options_values_id AS value_id, pa.price_prefix AS prefix, pa.options_values_price AS price FROM products_options popt INNER JOIN products_attributes pa ON pa.options_id = popt.products_options_id INNER JOIN products_options_values poval ON pa.options_values_id = poval.products_options_values_id AND popt.language_id = poval.language_id WHERE pa.products_id = 99921110 AND pa.options_id = 1 AND pa.options_values_id = 642 AND popt.language_id = 2');
 while ($r = tep_db_fetch_array($q)) {
   print_r($r);
 }
